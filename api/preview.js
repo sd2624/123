@@ -66,6 +66,7 @@ export default function handler(req, res) {
     <meta charset="UTF-8">
     <meta property="og:type" content="article">
     <meta property="og:url" content="${blogUrl}">
+    <link rel="canonical" href="${blogUrl}">
     <meta property="og:title" content="${title}">
     <meta property="og:description" content="${title}">
     <meta property="og:site_name" content="네이버 블로그">
