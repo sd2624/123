@@ -1,15 +1,10 @@
 {
   "version": 2,
   "builds": [
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node"
-    }
+    { "src": "api/**/*.js", "use": "@vercel/node" }
   ],
   "routes": [
-    {
-      "src": "/api/preview",
-      "dest": "/api/preview.js"
-    }
+    { "src": "/api/preview", "dest": "/api/preview.js" },
+    { "src": "/api/redirect", "dest": "/api/redirect.js" }
   ]
 }
