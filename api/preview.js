@@ -1,33 +1,35 @@
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
-const cachePath = path.join(process.cwd(), 'url_cache.json');
+let urlIndex = 1;
 
-// 임시 URL 캐시 저장
-function saveToCache(key, value) {
-  const cache = fs.existsSync(cachePath) ? JSON.parse(fs.readFileSync(cachePath, 'utf-8')) : {};
-  cache[key] = value;
-  fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf-8');
-}
-
-// config에서 무작위 URL 가져오기
-function getRandomUrl() {
+// config.json 읽기
+function getNextUrl() {
   try {
-    const config = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'config.json'), 'utf8'));
-    const postUrls = Object.keys(config)
-      .filter(k => k.startsWith('post_url_'))
-      .map(k => config[k]);
+    const configPath = path.join(process.cwd(), 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    if (postUrls.length === 0) return null;
-    return postUrls[Math.floor(Math.random() * postUrls.length)];
+    // post_url_1부터 순차적으로 검색
+    while (true) {
+      const key = `post_url_${urlIndex}`;
+      const url = config[key];
+
+      if (!url) {
+        // 더 이상 URL이 없으면 처음으로 돌아감
+        urlIndex = 1;
+        return config.post_url_1;
+      }
+
+      urlIndex++;
+      return url;
+    }
   } catch (error) {
-    console.error('Config 읽기 실패:', error);
+    console.error('Config 파일 읽기 실패:', error);
     return null;
   }
 }
 
 function generateRandomBlogUrl() {
-  const randomNum = Math.floor(Math.random() * 90000) + 10000;
+  const randomNum = Math.floor(Math.random() * 90000) + 10000; // 10000-99999
   return `https://blog.naver.com/user_${randomNum}`;
 }
 
@@ -37,7 +39,7 @@ function extractTitle(url) {
     if (match) {
       return decodeURIComponent(match[1])
         .replace(/-/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase());
+        .replace(/\b\w/g, l => l.toUpperCase()); // 각 단어 첫글자 대문자로
     }
     return '블로그 포스트';
   } catch {
@@ -46,21 +48,16 @@ function extractTitle(url) {
 }
 
 export default function handler(req, res) {
-  // 무작위 키 생성
-  const key = crypto.randomBytes(6).toString('hex');
-  const targetUrl = getRandomUrl();
+  const { to } = req.query;
 
-  if (!targetUrl) {
-    return res.status(500).send('URL을 가져올 수 없습니다.');
+  if (!to) {
+    return res.status(400).json({ error: 'URL parameter is required' });
   }
 
-  // 캐시에 저장 (두 번째 프록시에서 읽을 수 있게)
-  saveToCache(key, targetUrl);
-
+  // 다음 URL 가져오기
+  const targetUrl = to || getNextUrl();
   const blogUrl = generateRandomBlogUrl();
   const title = extractTitle(targetUrl);
-
-  const secondRedirect = `https://${req.headers.host}/api/redirect?id=${key}`;
 
   const html = `
 <!DOCTYPE html>
@@ -73,11 +70,11 @@ export default function handler(req, res) {
     <meta property="og:title" content="${title}">
     <meta property="og:description" content="${title}">
     <meta property="og:site_name" content="네이버 블로그">
-    <meta http-equiv="refresh" content="1;url=${secondRedirect}">
+    <meta http-equiv="refresh" content="1;url=${targetUrl}">
     <title>${title}</title>
     <script>
         setTimeout(function() {
-            window.location.href = "${secondRedirect}";
+            window.location.href = "${targetUrl}";
         }, 1000);
     </script>
 </head>
