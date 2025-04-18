@@ -8,14 +8,12 @@ function getNextUrl() {
     const configPath = path.join(process.cwd(), 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    // post_url_1부터 순차적으로 검색
     while (true) {
       const key = `post_url_${urlIndex}`;
       const url = config[key];
 
       if (!url) {
-        // 더 이상 URL이 없으면 처음으로 돌아감
-        urlIndex = 1;
+        urlIndex = 1; // 처음으로 돌아감
         return config.post_url_1;
       }
 
@@ -39,7 +37,7 @@ function extractTitle(url) {
     if (match) {
       return decodeURIComponent(match[1])
         .replace(/-/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase()); // 각 단어 첫글자 대문자로
+        .replace(/\b\w/g, l => l.toUpperCase());
     }
     return '블로그 포스트';
   } catch {
@@ -54,8 +52,7 @@ export default function handler(req, res) {
     return res.status(400).json({ error: 'URL parameter is required' });
   }
 
-  // 다음 URL 가져오기
-  const targetUrl = to || getNextUrl();
+  const targetUrl = getNextUrl(); // 순차적 URL 가져오기
   const blogUrl = generateRandomBlogUrl();
   const title = extractTitle(targetUrl);
 
