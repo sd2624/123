@@ -7,18 +7,18 @@ function getNextUrl() {
   try {
     const configPath = path.join(process.cwd(), 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    
+
     // post_url_1부터 순차적으로 검색
     while (true) {
       const key = `post_url_${urlIndex}`;
       const url = config[key];
-      
+
       if (!url) {
         // 더 이상 URL이 없으면 처음으로 돌아감
         urlIndex = 1;
         return config.post_url_1;
       }
-      
+
       urlIndex++;
       return url;
     }
@@ -49,7 +49,7 @@ function extractTitle(url) {
 
 export default function handler(req, res) {
   const { to } = req.query;
-  
+
   if (!to) {
     return res.status(400).json({ error: 'URL parameter is required' });
   }
