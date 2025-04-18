@@ -78,8 +78,6 @@ export default function handler(req, res) {
     </script>
 </head>
 <body>
-    <p>리디렉션 중입니다...</p>
-    <p>원본 URL: <span id="target_url">${targetUrl}</span></p>
 </body>
 </html>`;
 
