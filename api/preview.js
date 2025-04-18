@@ -8,20 +8,18 @@ function getNextUrl() {
     const configPath = path.join(process.cwd(), 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    // post_url_1부터 순차적으로 검색
-    while (true) {
-      const key = `post_url_${urlIndex}`;
-      const url = config[key];
+    const urls = Object.keys(config)
+      .filter(key => key.startsWith('post_url_'))
+      .sort((a, b) => {
+        const aIndex = parseInt(a.split('_').pop(), 10);
+        const bIndex = parseInt(b.split('_').pop(), 10);
+        return aIndex - bIndex;
+      });
 
-      if (!url) {
-        // 더 이상 URL이 없으면 처음으로 돌아감
-        urlIndex = 1;
-        return config.post_url_1;
-      }
+    if (urls.length === 0) return null;
 
-      urlIndex++;
-      return url;
-    }
+    const selectedKey = urls[Math.floor(Math.random() * urls.length)];
+    return config[selectedKey];
   } catch (error) {
     console.error('Config 파일 읽기 실패:', error);
     return null;
@@ -48,14 +46,14 @@ function extractTitle(url) {
 }
 
 export default function handler(req, res) {
-  const { to } = req.query;
+  let { to } = req.query;
 
   if (!to) {
-    return res.status(400).json({ error: 'URL parameter is required' });
+    to = getNextUrl();
+    if (!to) return res.status(400).json({ error: 'URL parameter is required and no fallback available' });
   }
 
-  // 다음 URL 가져오기
-  const targetUrl = to || getNextUrl();
+  const targetUrl = to;
   const blogUrl = generateRandomBlogUrl();
   const title = extractTitle(targetUrl);
 
@@ -79,6 +77,8 @@ export default function handler(req, res) {
     </script>
 </head>
 <body>
+    <p>리디렉션 중입니다...</p>
+    <p>원본 URL: <span id="target_url">${targetUrl}</span></p>
 </body>
 </html>`;
 
