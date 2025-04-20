@@ -1,51 +1,44 @@
-import fetch from 'node-fetch';
-import cheerio from 'cheerio';
+import fs from 'fs';
+import path from 'path';
 
+// Next.js API Route (Vercel Serverless Function)
 export default async function handler(req, res) {
-  const { to } = req.query;
+  // 1. config.json에서 URL 읽기
+  const idx = req.query.idx || '1'; // ?idx=1 형태로 요청
+  const configPath = path.join(process.cwd(), 'config.json');
 
-  if (!to) {
-    return res.status(400).send("Missing 'to' parameter");
+  let config;
+  try {
+    const configRaw = fs.readFileSync(configPath, 'utf-8');
+    config = JSON.parse(configRaw);
+  } catch (e) {
+    res.status(500).send('config.json 파일을 읽을 수 없습니다.');
+    return;
   }
 
+  const urlKey = `post_url_${idx}`;
+  const targetUrl = config[urlKey];
+  if (!targetUrl) {
+    res.status(400).send(`config.json에 ${urlKey}가 없습니다.`);
+    return;
+  }
+
+  // 2. 원본 URL에서 HTML 받아오기 (User-Agent 위장)
   try {
-    const response = await fetch(to, { timeout: 3000 }); // 대상 URL 가져오기
-    const html = await response.text();
-    const $ = cheerio.load(html);
+    const fetchRes = await fetch(targetUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
 
-    const ogTitle = $('meta[property="og:title"]').attr('content') || '미리보기 제목 없음';
-    const ogDesc = $('meta[property="og:description"]').attr('content') || ogTitle;
-    const ogImage = $('meta[property="og:image"]').attr('content') || 'https://ssl.pstatic.net/static/blog/img_common/blog_og_default.gif';
+    const contentType = fetchRes.headers.get('content-type') || 'text/html';
+    const html = await fetchRes.text();
 
-    // OG 태그로 구성된 HTML 생성 + JS로 리디렉션
-    const previewHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="${ogTitle}">
-  <meta property="og:description" content="${ogDesc}">
-  <meta property="og:image" content="${ogImage}">
-  <meta property="og:url" content="${to}">
-  <meta http-equiv="refresh" content="1;url=${to}">
-  <title>${ogTitle}</title>
-  <script>
-    setTimeout(() => {
-      window.location.href = "${to}";
-    }, 1000);
-  </script>
-</head>
-<body>
-
-</body>
-</html>
-`;
-
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.status(200).send(previewHtml);
-  } catch (error) {
-    console.error('미리보기 생성 실패:', error);
-    res.status(500).send("미리보기 생성에 실패했습니다.");
+    res.setHeader('Content-Type', contentType);
+    res.status(fetchRes.status).send(html);
+  } catch (err) {
+    res.status(500).send('Proxy fetch error: ' + err.message);
   }
 }
