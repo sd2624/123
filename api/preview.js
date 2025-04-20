@@ -1,24 +1,31 @@
 const fs = require('fs');
 const path = require('path');
-let urlIndex = 1;
+const { v4: uuidv4 } = require('uuid');
 
-// config.json에서 ID 기반 URL 매핑 불러오기
-function getUrlFromId(id) {
+// config.json에서 순차적으로 URL 가져오고 ID 자동 생성
+function getNextUrlWithId() {
   try {
     const configPath = path.join(process.cwd(), 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    if (config.links && config.links[id]) {
-      return config.links[id];
-    }
-    return null;
+    const links = config.links || {};
+    const nextIndex = Object.keys(links).length + 1;
+    const postUrl = config[`post_url_${nextIndex}`];
+
+    if (!postUrl) return null;
+
+    const newId = uuidv4();
+    links[newId] = postUrl;
+    config.links = links;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    return { id: newId, url: postUrl };
   } catch (error) {
-    console.error('config.json 읽기 실패:', error);
+    console.error('config.json 읽기 실패 또는 쓰기 실패:', error);
     return null;
   }
 }
 
-// 제목 추출
 function extractTitle(url) {
   try {
     const match = url.match(/\/(2025|\d{4})\/(.*?)(?:\.html|$)/);
@@ -33,21 +40,27 @@ function extractTitle(url) {
   }
 }
 
-// 메인 핸들러
 export default function handler(req, res) {
-  const { id, to } = req.query;
+  const { id } = req.query;
+  let config, targetUrl;
 
-  let targetUrl = null;
-
-  if (id) {
-    targetUrl = getUrlFromId(id);
-  } else if (to) {
-    targetUrl = to;
+  try {
+    const configPath = path.join(process.cwd(), 'config.json');
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (err) {
+    res.status(500).send('config.json 읽기 실패');
+    return;
   }
 
-  if (!targetUrl) {
-    res.status(400).send('유효한 URL을 찾을 수 없습니다.');
-    return;
+  if (id && config.links && config.links[id]) {
+    targetUrl = config.links[id];
+  } else {
+    const result = getNextUrlWithId();
+    if (!result) {
+      res.status(404).send('다음 URL을 찾을 수 없습니다.');
+      return;
+    }
+    targetUrl = result.url;
   }
 
   const title = extractTitle(targetUrl);
