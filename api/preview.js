@@ -1,44 +1,42 @@
-import fs from 'fs';
-import path from 'path';
-
-// Next.js API Route (Vercel Serverless Function)
+// Vercel 서버리스 함수 (api/preview.js)
 export default async function handler(req, res) {
-  // 1. config.json에서 URL 읽기
-  const idx = req.query.idx || '1'; // ?idx=1 형태로 요청
-  const configPath = path.join(process.cwd(), 'config.json');
+  const { data } = req.query; // 암호화된 파라미터로 변경
+  
+  // Base64 디코딩
+  const decoded = Buffer.from(data, 'base64').toString('utf-8');
+  const targetUrl = decodeURIComponent(decoded);
 
-  let config;
   try {
-    const configRaw = fs.readFileSync(configPath, 'utf-8');
-    config = JSON.parse(configRaw);
-  } catch (e) {
-    res.status(500).send('config.json 파일을 읽을 수 없습니다.');
-    return;
-  }
-
-  const urlKey = `post_url_${idx}`;
-  const targetUrl = config[urlKey];
-  if (!targetUrl) {
-    res.status(400).send(`config.json에 ${urlKey}가 없습니다.`);
-    return;
-  }
-
-  // 2. 원본 URL에서 HTML 받아오기 (User-Agent 위장)
-  try {
-    const fetchRes = await fetch(targetUrl, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
+    const response = await fetch(targetUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 ...' }
     });
+    
+    // 원본 사이트의 메타태그 추출
+    const html = await response.text();
+    const soup = new JSDOM(html).window.document;
+    
+    // OG 태그 재생성
+    const ogTags = {
+      title: soup.querySelector('meta[property="og:title"]')?.content || '기본 제목',
+      image: soup.querySelector('meta[property="og:image"]')?.content || '',
+      description: soup.querySelector('meta[property="og:description"]')?.content || ''
+    };
 
-    const contentType = fetchRes.headers.get('content-type') || 'text/html';
-    const html = await fetchRes.text();
-
-    res.setHeader('Content-Type', contentType);
-    res.status(fetchRes.status).send(html);
+    // 프록시 서버에서 OG 태그 포함해 응답
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`
+      <html>
+        <head>
+          <meta property="og:title" content="${ogTags.title}">
+          <meta property="og:image" content="${ogTags.image}">
+          <meta property="og:description" content="${ogTags.description}">
+        </head>
+        <body style="margin:0">
+          <iframe src="${targetUrl}" width="100%" height="100%" frameborder="0"></iframe>
+        </body>
+      </html>
+    `);
   } catch (err) {
-    res.status(500).send('Proxy fetch error: ' + err.message);
+    res.status(500).send('Error');
   }
 }
