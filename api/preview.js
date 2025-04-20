@@ -1,79 +1,51 @@
-const fs = require('fs');
-const path = require('path');
-let urlIndex = 1;
+import fetch from 'node-fetch';
+import cheerio from 'cheerio';
 
-// config.json에서 순차적으로 URL 가져오기
-function getNextUrl() {
-  try {
-    const configPath = path.join(process.cwd(), 'config.json');
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-    // 순차적으로 post_url_n 찾기
-    while (true) {
-      const key = `post_url_${urlIndex}`;
-      const url = config[key];
-
-      if (!url) {
-        // URL 끝났으면 처음부터 다시
-        urlIndex = 1;
-        return config.post_url_1;
-      }
-
-      urlIndex++;
-      return url;
-    }
-  } catch (error) {
-    console.error('config.json 읽기 실패:', error);
-    return null;
-  }
-}
-
-// 제목 추출
-function extractTitle(url) {
-  try {
-    const match = url.match(/\/2025\/(.*?)(?:\.html|$)/);
-    if (match) {
-      return decodeURIComponent(match[1])
-        .replace(/-/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase());
-    }
-    return '블로그 포스트';
-  } catch {
-    return '블로그 포스트';
-  }
-}
-
-// 메인 핸들러
-export default function handler(req, res) {
+export default async function handler(req, res) {
   const { to } = req.query;
 
-  const targetUrl = to || getNextUrl();
-  const title = extractTitle(targetUrl);
-  const blogUrl = `https://blog.naver.com/random_${Math.floor(Math.random() * 100000)}`;
+  if (!to) {
+    return res.status(400).send("Missing 'to' parameter");
+  }
 
-  const html = `
+  try {
+    const response = await fetch(to, { timeout: 3000 }); // 대상 URL 가져오기
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    const ogTitle = $('meta[property="og:title"]').attr('content') || '미리보기 제목 없음';
+    const ogDesc = $('meta[property="og:description"]').attr('content') || ogTitle;
+    const ogImage = $('meta[property="og:image"]').attr('content') || 'https://ssl.pstatic.net/static/blog/img_common/blog_og_default.gif';
+
+    // OG 태그로 구성된 HTML 생성 + JS로 리디렉션
+    const previewHtml = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta property="og:type" content="article">
-  <meta property="og:url" content="${blogUrl}">
-  <meta property="og:title" content="${title}">
-  <meta property="og:description" content="${title}">
-  <meta property="og:site_name" content="네이버 블로그">
-  <meta http-equiv="refresh" content="1;url=${targetUrl}">
-  <link rel="canonical" href="${blogUrl}">
-  <title>${title}</title>
+  <meta property="og:title" content="${ogTitle}">
+  <meta property="og:description" content="${ogDesc}">
+  <meta property="og:image" content="${ogImage}">
+  <meta property="og:url" content="${to}">
+  <meta http-equiv="refresh" content="1;url=${to}">
+  <title>${ogTitle}</title>
   <script>
     setTimeout(() => {
-      window.location.href = "${targetUrl}";
+      window.location.href = "${to}";
     }, 1000);
   </script>
 </head>
 <body>
-</body>
-</html>`;
 
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.status(200).send(html);
+</body>
+</html>
+`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.status(200).send(previewHtml);
+  } catch (error) {
+    console.error('미리보기 생성 실패:', error);
+    res.status(500).send("미리보기 생성에 실패했습니다.");
+  }
 }
