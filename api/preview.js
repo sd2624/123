@@ -2,26 +2,16 @@ const fs = require('fs');
 const path = require('path');
 let urlIndex = 1;
 
-// config.json에서 순차적으로 URL 가져오기
-function getNextUrl() {
+// config.json에서 ID 기반 URL 매핑 불러오기
+function getUrlFromId(id) {
   try {
     const configPath = path.join(process.cwd(), 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    // 순차적으로 post_url_n 찾기
-    while (true) {
-      const key = `post_url_${urlIndex}`;
-      const url = config[key];
-
-      if (!url) {
-        // URL 끝났으면 처음부터 다시
-        urlIndex = 1;
-        return config.post_url_1;
-      }
-
-      urlIndex++;
-      return url;
+    if (config.links && config.links[id]) {
+      return config.links[id];
     }
+    return null;
   } catch (error) {
     console.error('config.json 읽기 실패:', error);
     return null;
@@ -31,9 +21,9 @@ function getNextUrl() {
 // 제목 추출
 function extractTitle(url) {
   try {
-    const match = url.match(/\/2025\/(.*?)(?:\.html|$)/);
+    const match = url.match(/\/(2025|\d{4})\/(.*?)(?:\.html|$)/);
     if (match) {
-      return decodeURIComponent(match[1])
+      return decodeURIComponent(match[2])
         .replace(/-/g, ' ')
         .replace(/\b\w/g, l => l.toUpperCase());
     }
@@ -45,9 +35,21 @@ function extractTitle(url) {
 
 // 메인 핸들러
 export default function handler(req, res) {
-  const { to } = req.query;
+  const { id, to } = req.query;
 
-  const targetUrl = to || getNextUrl();
+  let targetUrl = null;
+
+  if (id) {
+    targetUrl = getUrlFromId(id);
+  } else if (to) {
+    targetUrl = to;
+  }
+
+  if (!targetUrl) {
+    res.status(400).send('유효한 URL을 찾을 수 없습니다.');
+    return;
+  }
+
   const title = extractTitle(targetUrl);
   const blogUrl = `https://blog.naver.com/random_${Math.floor(Math.random() * 100000)}`;
 
@@ -70,8 +72,7 @@ export default function handler(req, res) {
     }, 1000);
   </script>
 </head>
-<body>
-</body>
+<body></body>
 </html>`;
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
