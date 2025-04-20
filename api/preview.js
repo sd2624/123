@@ -1,36 +1,39 @@
 const fs = require('fs');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+let urlIndex = 1;
 
-// config.json에서 순차적으로 URL 가져오고 ID 자동 생성
-function getNextUrlWithId() {
+// config.json에서 순차적으로 URL 가져오기
+function getNextUrl() {
   try {
     const configPath = path.join(process.cwd(), 'config.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    const links = config.links || {};
-    const nextIndex = Object.keys(links).length + 1;
-    const postUrl = config[`post_url_${nextIndex}`];
+    // 순차적으로 post_url_n 찾기
+    while (true) {
+      const key = `post_url_${urlIndex}`;
+      const url = config[key];
 
-    if (!postUrl) return null;
+      if (!url) {
+        // URL 끝났으면 처음부터 다시
+        urlIndex = 1;
+        return config.post_url_1;
+      }
 
-    const newId = uuidv4();
-    links[newId] = postUrl;
-    config.links = links;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    return { id: newId, url: postUrl };
+      urlIndex++;
+      return url;
+    }
   } catch (error) {
-    console.error('config.json 읽기 실패 또는 쓰기 실패:', error);
+    console.error('config.json 읽기 실패:', error);
     return null;
   }
 }
 
+// 제목 추출
 function extractTitle(url) {
   try {
-    const match = url.match(/\/(2025|\d{4})\/(.*?)(?:\.html|$)/);
+    const match = url.match(/\/2025\/(.*?)(?:\.html|$)/);
     if (match) {
-      return decodeURIComponent(match[2])
+      return decodeURIComponent(match[1])
         .replace(/-/g, ' ')
         .replace(/\b\w/g, l => l.toUpperCase());
     }
@@ -40,29 +43,11 @@ function extractTitle(url) {
   }
 }
 
+// 메인 핸들러
 export default function handler(req, res) {
-  const { id } = req.query;
-  let config, targetUrl;
+  const { to } = req.query;
 
-  try {
-    const configPath = path.join(process.cwd(), 'config.json');
-    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (err) {
-    res.status(500).send('config.json 읽기 실패');
-    return;
-  }
-
-  if (id && config.links && config.links[id]) {
-    targetUrl = config.links[id];
-  } else {
-    const result = getNextUrlWithId();
-    if (!result) {
-      res.status(404).send('다음 URL을 찾을 수 없습니다.');
-      return;
-    }
-    targetUrl = result.url;
-  }
-
+  const targetUrl = to || getNextUrl();
   const title = extractTitle(targetUrl);
   const blogUrl = `https://blog.naver.com/random_${Math.floor(Math.random() * 100000)}`;
 
@@ -85,7 +70,8 @@ export default function handler(req, res) {
     }, 1000);
   </script>
 </head>
-<body></body>
+<body>
+</body>
 </html>`;
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
