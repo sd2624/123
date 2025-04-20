@@ -1,0 +1,11 @@
+{
+  "name": "vercel-preview-api",
+  "version": "1.0.0",
+  "main": "api/preview.js",
+  "type": "module",
+  "scripts": {
+    "start": "node api/preview.js"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0"
+  }
